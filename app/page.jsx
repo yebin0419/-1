@@ -76,6 +76,45 @@ async function loadRanking(difficulty) {
   return mergeScores(Array.isArray(server) ? server : [], local, difficulty);
 }
 
+// ---------- 리뷰도 로컬 백업 + 서버 머지 ----------
+const LOCAL_REVIEWS_KEY = "ms_reviews_v1";
+function readLocalReviews() {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(localStorage.getItem(LOCAL_REVIEWS_KEY) || "[]"); }
+  catch { return []; }
+}
+function writeLocalReview(entry) {
+  if (typeof window === "undefined") return;
+  const data = readLocalReviews();
+  data.push(entry);
+  localStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(data));
+}
+function mergeReviews(serverRows, localRows) {
+  const seen = new Set();
+  const keyOf = (r) =>
+    `${r.player_name}|${r.rating}|${r.comment ?? ""}|${r.created_at ?? ""}`;
+  const result = [];
+  for (const r of [...serverRows, ...localRows]) {
+    const k = keyOf(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    result.push(r);
+  }
+  result.sort(
+    (a, b) => new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0)
+  );
+  return result.slice(0, 50);
+}
+async function loadReviews() {
+  const server = await apiGet("/api/reviews");
+  const local = readLocalReviews();
+  return mergeReviews(Array.isArray(server) ? server : [], local);
+}
+
+function diffLabel(d) {
+  return d === "easy" ? "쉬움" : d === "medium" ? "보통" : d === "hard" ? "어려움" : d;
+}
+
 export default function Page() {
   const [screen, setScreen] = useState("start"); // start | game | ranking | reviews
   const [playerName, setPlayerName] = useState("");
@@ -97,6 +136,10 @@ export default function Page() {
   const [rankingDiff, setRankingDiff] = useState("easy");
   const [rankingData, setRankingData] = useState(null); // null = loading
   const [reviewsData, setReviewsData] = useState(null);
+
+  // 시작 화면용 미리보기
+  const [previewScores, setPreviewScores] = useState([]);
+  const [previewReviews, setPreviewReviews] = useState([]);
 
   const gameRef = useRef(null);
   const timerRef = useRef(null);
@@ -124,6 +167,25 @@ export default function Page() {
   }, [stopTimer]);
 
   useEffect(() => () => stopTimer(), [stopTimer]);
+
+  // 시작 화면에 들어올 때마다 최근 기록/리뷰 자동 로드
+  const refreshPreview = useCallback(async () => {
+    const [easy, medium, hard] = await Promise.all([
+      loadRanking("easy"),
+      loadRanking("medium"),
+      loadRanking("hard"),
+    ]);
+    const recent = [...easy, ...medium, ...hard]
+      .sort((a, b) => new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0))
+      .slice(0, 5);
+    setPreviewScores(recent);
+    const r = await loadReviews();
+    setPreviewReviews(r.slice(0, 3));
+  }, []);
+
+  useEffect(() => {
+    if (screen === "start") refreshPreview();
+  }, [screen, refreshPreview]);
 
   const startGame = useCallback(() => {
     const game = new Minesweeper(difficulty);
@@ -196,13 +258,18 @@ export default function Page() {
   const submitReview = async () => {
     if (reviewSubmitted) { toast("이미 리뷰를 등록하셨어요"); return; }
     if (rating === 0) { toast("별점을 선택해주세요"); return; }
-    const ok = await apiPost("/api/reviews", {
+    const entry = {
       player_name: playerName,
       rating,
       comment: reviewText.trim(),
-    });
-    if (ok) { setReviewSubmitted(true); toast("리뷰가 등록되었습니다 ✨"); }
-    else toast("리뷰 등록 실패");
+    };
+    const saved = await apiPost("/api/reviews", entry);
+    const backup = (saved && typeof saved === "object" && saved.created_at)
+      ? saved
+      : { ...entry, created_at: new Date().toISOString() };
+    writeLocalReview(backup);
+    setReviewSubmitted(true);
+    toast("리뷰가 등록되었습니다 ✨");
   };
 
   const openRanking = async () => {
@@ -223,7 +290,7 @@ export default function Page() {
   const openReviews = async () => {
     setScreen("reviews");
     setReviewsData(null);
-    const data = await apiGet(`/api/reviews`);
+    const data = await loadReviews();
     setReviewsData(data);
   };
 
@@ -277,8 +344,64 @@ export default function Page() {
 
           <div className="start-actions">
             <button className="primary-btn" onClick={onStart}>게임 시작</button>
-            <button className="secondary-btn" onClick={openRanking}>🏆 랭킹 보기</button>
-            <button className="secondary-btn" onClick={openReviews}>💬 리뷰 보기</button>
+            <button className="secondary-btn" onClick={openRanking}>🏆 전체 랭킹</button>
+            <button className="secondary-btn" onClick={openReviews}>💬 전체 리뷰</button>
+          </div>
+
+          <div className="preview-sections">
+            <div className="preview-card">
+              <div className="preview-head">
+                <h3>📜 최근 기록</h3>
+                <button className="preview-more" onClick={openRanking}>전체 보기 →</button>
+              </div>
+              {previewScores.length === 0 ? (
+                <p className="empty-small">아직 기록이 없어요. 지금 플레이해보세요!</p>
+              ) : (
+                previewScores.map((s, i) => {
+                  const mine = playerName && s.player_name === playerName;
+                  return (
+                    <div className={"preview-row" + (mine ? " mine" : "")} key={"ps-" + i}>
+                      <span className="preview-name">
+                        {escapeText(s.player_name)}
+                        {mine && <span className="me-badge">나</span>}
+                      </span>
+                      <span className="preview-diff">{diffLabel(s.difficulty)}</span>
+                      <span className="preview-score">
+                        {s.score}점 · {s.time_seconds}초
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="preview-card">
+              <div className="preview-head">
+                <h3>💬 최근 리뷰</h3>
+                <button className="preview-more" onClick={openReviews}>전체 보기 →</button>
+              </div>
+              {previewReviews.length === 0 ? (
+                <p className="empty-small">아직 리뷰가 없어요. 첫 리뷰를 남겨보세요!</p>
+              ) : (
+                previewReviews.map((r, i) => {
+                  const mine = playerName && r.player_name === playerName;
+                  return (
+                    <div className={"preview-review" + (mine ? " mine" : "")} key={"pr-" + i}>
+                      <div className="preview-review-head">
+                        <span className="preview-name">
+                          {escapeText(r.player_name)}
+                          {mine && <span className="me-badge">나</span>}
+                        </span>
+                        <span className="preview-stars">{"★".repeat(r.rating)}</span>
+                      </div>
+                      {r.comment && (
+                        <div className="preview-review-text">{escapeText(r.comment)}</div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
         {toastMsg && <div className="toast">{toastMsg}</div>}

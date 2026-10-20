@@ -82,6 +82,73 @@ html, body {
 
 .start-actions { display: flex; flex-direction: column; gap: 10px; }
 
+/* ---------- 시작 화면 미리보기 (최근 기록/리뷰) ---------- */
+.preview-sections {
+  display: grid; grid-template-columns: 1fr; gap: 12px;
+  margin-top: 24px; text-align: left;
+}
+@media (min-width: 760px) {
+  .preview-sections { grid-template-columns: 1fr 1fr; }
+}
+.preview-card {
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.preview-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.preview-head h3 {
+  font-size: 13px; color: var(--muted); font-weight: 500;
+}
+.preview-more {
+  background: none; border: none; color: var(--accent);
+  font-size: 11px; cursor: pointer; padding: 2px 4px;
+}
+.preview-more:hover { color: var(--accent-2); }
+
+.preview-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0; font-size: 13px;
+  border-bottom: 1px dashed var(--border);
+}
+.preview-row:last-child { border-bottom: none; }
+.preview-row.mine { color: var(--accent-2); }
+.preview-name {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 600;
+}
+.preview-diff {
+  color: var(--muted); font-size: 11px;
+  background: var(--panel); padding: 2px 8px; border-radius: 6px;
+}
+.preview-score {
+  color: var(--accent); font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.preview-row.mine .preview-score { color: var(--accent-2); }
+
+.preview-review {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.preview-review:last-child { border-bottom: none; }
+.preview-review.mine .preview-name { color: var(--accent-2); }
+.preview-review-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px;
+}
+.preview-stars { color: #e0af68; font-size: 13px; }
+.preview-review-text {
+  font-size: 12px; color: var(--muted); margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.empty-small {
+  color: var(--muted); font-size: 12px; padding: 10px 0;
+  text-align: center;
+}
+
 .primary-btn {
   padding: 16px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
