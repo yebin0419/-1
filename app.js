@@ -1,71 +1,44 @@
-// ---------- Supabase 클라이언트 ----------
-const sb = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url && window.SUPABASE_CONFIG.anonKey)
-  ? supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey)
-  : null;
-
-if (!sb) {
-  console.warn("Supabase 설정이 비어있습니다. config.js를 확인하세요. (로컬 임시 저장으로 동작합니다)");
+// ---------- 서버 API 호출 ----------
+async function apiGet(path) {
+  try {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    console.error("API GET 실패:", path, e);
+    return [];
+  }
 }
 
-// ---------- 로컬 폴백 (Supabase 설정이 없을 때) ----------
-const LocalStore = {
-  getScores(difficulty) {
-    const data = JSON.parse(localStorage.getItem("ms_scores") || "[]");
-    return data.filter(s => s.difficulty === difficulty)
-      .sort((a, b) => b.score - a.score).slice(0, 20);
-  },
-  addScore(entry) {
-    const data = JSON.parse(localStorage.getItem("ms_scores") || "[]");
-    data.push({ ...entry, created_at: new Date().toISOString() });
-    localStorage.setItem("ms_scores", JSON.stringify(data));
-  },
-  getReviews() {
-    return JSON.parse(localStorage.getItem("ms_reviews") || "[]")
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  },
-  addReview(entry) {
-    const data = JSON.parse(localStorage.getItem("ms_reviews") || "[]");
-    data.push({ ...entry, created_at: new Date().toISOString() });
-    localStorage.setItem("ms_reviews", JSON.stringify(data));
-  },
-};
+async function apiPost(path, body) {
+  try {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return true;
+  } catch (e) {
+    console.error("API POST 실패:", path, e);
+    return false;
+  }
+}
 
-// ---------- Supabase CRUD ----------
 async function fetchScores(difficulty) {
-  if (!sb) return LocalStore.getScores(difficulty);
-  const { data, error } = await sb
-    .from("scores")
-    .select("*")
-    .eq("difficulty", difficulty)
-    .order("score", { ascending: false })
-    .limit(20);
-  if (error) { console.error(error); return []; }
-  return data;
+  return apiGet(`/api/scores?difficulty=${encodeURIComponent(difficulty)}`);
 }
-
 async function saveScore(entry) {
-  if (!sb) { LocalStore.addScore(entry); return true; }
-  const { error } = await sb.from("scores").insert(entry);
-  if (error) { console.error(error); return false; }
-  return true;
+  return apiPost("/api/scores", entry);
 }
-
 async function fetchReviews() {
-  if (!sb) return LocalStore.getReviews();
-  const { data, error } = await sb
-    .from("reviews")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (error) { console.error(error); return []; }
-  return data;
+  return apiGet("/api/reviews");
 }
-
 async function saveReview(entry) {
-  if (!sb) { LocalStore.addReview(entry); return true; }
-  const { error } = await sb.from("reviews").insert(entry);
-  if (error) { console.error(error); return false; }
-  return true;
+  return apiPost("/api/reviews", entry);
 }
 
 // ---------- 앱 상태 ----------
