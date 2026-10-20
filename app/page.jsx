@@ -35,11 +35,45 @@ async function apiPost(path, body) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${res.status}`);
     }
-    return true;
+    return await res.json().catch(() => ({}));
   } catch (e) {
     console.error("POST 실패:", path, e);
-    return false;
+    return null;
   }
+}
+
+// ---------- 로컬 백업: 서버 메모리 폴백이 날아가도 내 기록은 유지 ----------
+const LOCAL_SCORES_KEY = "ms_scores_v1";
+function readLocalScores() {
+  if (typeof window === "undefined") return [];
+  try { return JSON.parse(localStorage.getItem(LOCAL_SCORES_KEY) || "[]"); }
+  catch { return []; }
+}
+function writeLocalScore(entry) {
+  if (typeof window === "undefined") return;
+  const data = readLocalScores();
+  data.push(entry);
+  localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(data));
+}
+function mergeScores(serverRows, localRows, difficulty) {
+  const seen = new Set();
+  const keyOf = (s) =>
+    `${s.player_name}|${s.score}|${s.time_seconds}|${s.difficulty}|${s.created_at ?? ""}`;
+  const result = [];
+  for (const s of [...serverRows, ...localRows]) {
+    if (s.difficulty !== difficulty) continue;
+    const k = keyOf(s);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    result.push(s);
+  }
+  result.sort((a, b) => b.score - a.score || a.time_seconds - b.time_seconds);
+  return result.slice(0, 20);
+}
+async function loadRanking(difficulty) {
+  const server = await apiGet(`/api/scores?difficulty=${encodeURIComponent(difficulty)}`);
+  const local = readLocalScores();
+  return mergeScores(Array.isArray(server) ? server : [], local, difficulty);
 }
 
 export default function Page() {
@@ -142,13 +176,20 @@ export default function Page() {
     setResultScore(score);
     setResultOpen(true);
     if (won && !scoreSaved) {
-      const ok = await apiPost("/api/scores", {
+      const entry = {
         player_name: playerName,
         score,
         time_seconds: time,
         difficulty,
-      });
-      if (ok) setScoreSaved(true);
+      };
+      const saved = await apiPost("/api/scores", entry);
+      // 서버 저장이 실패했거나 서버 메모리 폴백에 있어도 날아갈 수 있으니
+      // localStorage에 반드시 백업해 둔다.
+      const backup = (saved && typeof saved === "object" && saved.created_at)
+        ? saved
+        : { ...entry, created_at: new Date().toISOString() };
+      writeLocalScore(backup);
+      setScoreSaved(true);
     }
   };
 
@@ -165,16 +206,18 @@ export default function Page() {
   };
 
   const openRanking = async () => {
+    // 방금 플레이한 난이도를 기본 탭으로
+    const initial = difficulty || "easy";
     setScreen("ranking");
-    setRankingDiff("easy");
+    setRankingDiff(initial);
     setRankingData(null);
-    const d = await apiGet(`/api/scores?difficulty=easy`);
-    setRankingData(d);
+    const data = await loadRanking(initial);
+    setRankingData(data);
   };
   const changeRankingDiff = async (d) => {
     setRankingDiff(d);
     setRankingData(null);
-    const data = await apiGet(`/api/scores?difficulty=${d}`);
+    const data = await loadRanking(d);
     setRankingData(data);
   };
   const openReviews = async () => {
@@ -266,13 +309,22 @@ export default function Page() {
             ? <div className="empty">불러오는 중...</div>
             : rankingData.length === 0
               ? <div className="empty">아직 기록이 없어요 👀</div>
-              : rankingData.map((s, i) => (
-                <div className="list-item" key={s.id ?? i}>
-                  <div className="rank">{i + 1}</div>
-                  <div className="name">{escapeText(s.player_name)}</div>
-                  <div className="score">{s.score}점 · {s.time_seconds}초</div>
-                </div>
-              ))}
+              : rankingData.map((s, i) => {
+                const isMine = playerName && s.player_name === playerName;
+                return (
+                  <div
+                    className={"list-item" + (isMine ? " mine" : "")}
+                    key={(s.id ?? "l") + "-" + i}
+                  >
+                    <div className="rank">{i + 1}</div>
+                    <div className="name">
+                      {escapeText(s.player_name)}
+                      {isMine && <span className="me-badge">나</span>}
+                    </div>
+                    <div className="score">{s.score}점 · {s.time_seconds}초</div>
+                  </div>
+                );
+              })}
         </div>
       </main>
     );

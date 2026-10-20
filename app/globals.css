@@ -227,6 +227,17 @@ html, body {
 .list-item {
   background: var(--panel); padding: 14px 18px; border-radius: 12px;
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  border: 1px solid transparent;
+}
+.list-item.mine {
+  border-color: var(--accent-2);
+  background: linear-gradient(90deg, rgba(187,154,247,0.12), var(--panel));
+}
+.me-badge {
+  display: inline-block; margin-left: 8px;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-2); color: var(--bg);
+  font-size: 11px; font-weight: 700; vertical-align: middle;
 }
 .list-item .rank {
   font-size: 20px; font-weight: 700; color: var(--accent); width: 40px;
