@@ -1,6 +1,7 @@
 -- Supabase SQL Editor에서 전체 복사해 실행하세요.
 
 -- 점수 테이블
+
 create table if not exists public.scores (
   id            bigserial primary key,
   player_name   text not null check (char_length(player_name) between 1 and 20),

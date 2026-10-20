@@ -2,18 +2,20 @@
   "name": "minesweeper-yebin",
   "version": "1.0.0",
   "private": true,
-  "description": "김예빈의 지뢰게임 - Node.js + Vercel + Supabase",
-  "main": "server.js",
+  "description": "김예빈의 지뢰게임 - Next.js + Vercel + Supabase",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.17"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "next": "^14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   }
 }
